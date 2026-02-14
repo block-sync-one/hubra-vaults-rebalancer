@@ -1,0 +1,42 @@
+{
+  "name": "rebalance-bot-template",
+  "version": "1.0.0",
+  "description": "A bot to periodically rebalance funds equally across strategies.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@coral-xyz/anchor-v29": "npm:@coral-xyz/anchor@^0.29.0",
+    "@drift-labs/sdk": "^2.130.0-beta.4",
+    "@jup-ag/lend": "^0.0.98",
+    "@kamino-finance/farms-sdk": "^3.2.9",
+    "@kamino-finance/klend-sdk": "^6.0.2",
+    "@solana/kit": "^2.1.1",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.0",
+    "@voltr/vault-sdk": "^1.0.9",
+    "bs58": "^6.0.0",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^16.5.0",
+    "dotenv-expand": "^12.0.2",
+    "pino": "^9.7.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.1.6",
+    "@types/node": "^22.10.10",
+    "pino-pretty": "^13.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "@drift-labs/sdk": {
+      "rpc-websockets": "7.5.1"
+    },
+    "rpc-websockets": "^9.0.2"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "strategies": [
+    { "id": "driftMain", "type": "driftEarn", "address": "GXWqPpjQpdz7KZw9p7f5PX2eGxHAhvpNXiviFkAB8zXg", "marketIndex": 0 },
+    { "id": "driftJlp", "type": "driftEarn", "address": "TMoWTkuPJHArEeohUTWy3RYoMgfWqeCpzjPTLeGVYP9", "marketIndex": 34 },
+    { "id": "jupiterLend", "type": "jupiterLend", "address": "2vVYHYM8VYnvZqQWpTJSj8o8DBf1wM8pVs3bsTgYZiqJ" },
+    { "id": "kaminoMainMarket", "type": "kaminoVault", "address": "A3hTCWdnfV6uiQLxRmnv17EpiEtmc93v1AGQnWy44Mup" },
+    { "id": "kaminoMainMarket", "type": "kaminoMarket", "address": "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59" },
+    { "id": "kaminoJlpMarket", "type": "kaminoMarket", "address": "Ga4rZytCpq1unD4DbEJ5bkHeUz9g3oh9AAFEi6vSauXp" },
+    { "id": "kaminoHumaMarket", "type": "kaminoMarket", "address": "4QKFoFDzNFnvfkzVazABbCEfMwd3y1pZqUVzmpnkCphj" },
+    { "id": "kaminoPrimeMarket", "type": "kaminoMarket", "address": "9GJ9GBRwCp4pHmWrQ43L5xpc9Vykg7jnfwcFGN8FoHYu" },
+    { "id": "kaminoSolsticeMarket", "type": "kaminoMarket", "address": "6XdN3zXeoYKgfSeZb8h1LpiEkUXRJ3CbimE5FJ35XFBP" },
+    { "id": "kaminoXstocksMarket", "type": "kaminoMarket", "address": "97zoywd8mPZsGTg8q1wdD2Wgkdrs2tqusp1Qqcxbyj7E" },
+    { "id": "kaminoMapleMarket", "type": "kaminoMarket", "address": "Atj6UREVWa7WxbF2EMKNyfmYUY1U1txughe2gjhcPDCo" },
+    { "id": "kaminoOnreMarket", "type": "kaminoMarket", "address": "AYL4LMc4ZCVyq3Z7XPJGWDM4H9PiWjqXAAuuHBEGVR2Z" }
+  ]
+}

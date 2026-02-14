@@ -1,0 +1,107 @@
+import { config as dotenvConfig } from "dotenv";
+import { expand } from "dotenv-expand";
+import { Address, address } from "@solana/kit";
+import { z } from "zod";
+
+// Load environment variables from .env file
+expand(dotenvConfig());
+
+const addressField = z.string().min(1).transform((val) => address(val) as Address);
+
+const boolFlag = (defaultVal: string) =>
+  z
+    .string()
+    .optional()
+    .default(defaultVal)
+    .transform((v) => v === "true" || v === "1");
+
+const envSchema = z.object({
+  // Core
+  RPC_URL: z.string().min(1, "RPC_URL is required"),
+  RPC_FALLBACK_URL: z.string().min(1).optional(),
+  MANAGER_SECRET_PATH: z.string().min(1, "MANAGER_SECRET_PATH is required"),
+
+  // Intervals
+  REFRESH_LOOP_INTERVAL_MS: z.coerce.number().default(600000),
+  HARVEST_FEE_LOOP_INTERVAL_MS: z.coerce.number().default(1800000),
+  REBALANCE_LOOP_INTERVAL_MS: z.coerce.number().default(1800000),
+  CLAIM_KVAULT_REWARD_LOOP_INTERVAL_MS: z.coerce.number().default(3600000),
+  CLAIM_KMARKET_REWARD_LOOP_INTERVAL_MS: z.coerce.number().default(3600000),
+  DEPOSIT_STRATEGY_MIN_AMOUNT: z.coerce.number().default(0),
+  JUPITER_SWAP_SLIPPAGE_BPS: z.coerce.number().default(50),
+  REFRESH_MIN_POSITION_VALUE: z.coerce.number().default(1_000_000),
+  REBALANCE_DEVIATION_BPS: z.coerce.number().default(0),
+
+  // Health
+  HEALTH_SERVER_PORT: z.coerce.number().default(9090),
+
+  // Feature flags
+  ENABLE_REBALANCE_LOOP: boolFlag("true"),
+  ENABLE_REFRESH_LOOP: boolFlag("true"),
+  ENABLE_CLAIM_KVAULT_REWARD_LOOP: boolFlag("false"),
+  ENABLE_CLAIM_KMARKET_REWARD_LOOP: boolFlag("true"),
+  ENABLE_HARVEST_FEE_LOOP: boolFlag("true"),
+
+  // Logging
+  LOG_LEVEL: z.string().optional().default("info"),
+
+  // On-Chain Addresses (non-strategy)
+  VOLTR_VAULT_ADDRESS: addressField,
+  VOLTR_VAULT_ADMIN_ADDRESS: addressField,
+  VOLTR_VAULT_MANAGER_ADDRESS: addressField,
+  DRIFT_USDC_ORACLE_ADDRESS: addressField,
+  ASSET_MINT_ADDRESS: addressField,
+  ASSET_TOKEN_PROGRAM: addressField,
+  KAMINO_SCOPE_ADDRESS: addressField,
+  VOLTR_LOOKUP_TABLE_ADDRESS: addressField,
+  DRIFT_LOOKUP_TABLE_ADDRESS: addressField,
+});
+
+function parseConfig() {
+  const result = envSchema.safeParse(process.env);
+  if (!result.success) {
+    const formatted = result.error.issues
+      .map((issue) => `  ${issue.path.join(".")}: ${issue.message}`)
+      .join("\n");
+    console.error(`\nConfig validation failed:\n${formatted}\n`);
+    process.exit(1);
+  }
+  return result.data;
+}
+
+const env = parseConfig();
+
+export const config = {
+  rpcUrl: env.RPC_URL,
+  rpcFallbackUrl: env.RPC_FALLBACK_URL,
+  managerSecretPath: env.MANAGER_SECRET_PATH,
+  refreshLoopIntervalMs: env.REFRESH_LOOP_INTERVAL_MS,
+  harvestFeeLoopIntervalMs: env.HARVEST_FEE_LOOP_INTERVAL_MS,
+  rebalanceLoopIntervalMs: env.REBALANCE_LOOP_INTERVAL_MS,
+  claimKvaultRewardLoopIntervalMs: env.CLAIM_KVAULT_REWARD_LOOP_INTERVAL_MS,
+  claimKmarketRewardLoopIntervalMs: env.CLAIM_KMARKET_REWARD_LOOP_INTERVAL_MS,
+  depositStrategyMinAmount: env.DEPOSIT_STRATEGY_MIN_AMOUNT,
+  jupiterSwapSlippageBps: env.JUPITER_SWAP_SLIPPAGE_BPS,
+  refreshMinPositionValue: env.REFRESH_MIN_POSITION_VALUE,
+  rebalanceDeviationBps: env.REBALANCE_DEVIATION_BPS,
+  healthServerPort: env.HEALTH_SERVER_PORT,
+  logLevel: env.LOG_LEVEL,
+
+  // Feature flags
+  enableRebalanceLoop: env.ENABLE_REBALANCE_LOOP,
+  enableRefreshLoop: env.ENABLE_REFRESH_LOOP,
+  enableClaimKvaultRewardLoop: env.ENABLE_CLAIM_KVAULT_REWARD_LOOP,
+  enableClaimKmarketRewardLoop: env.ENABLE_CLAIM_KMARKET_REWARD_LOOP,
+  enableHarvestFeeLoop: env.ENABLE_HARVEST_FEE_LOOP,
+
+  // On-Chain Addresses
+  voltrVaultAddress: env.VOLTR_VAULT_ADDRESS,
+  voltrVaultAdminAddress: env.VOLTR_VAULT_ADMIN_ADDRESS,
+  voltrVaultManagerAddress: env.VOLTR_VAULT_MANAGER_ADDRESS,
+  driftUsdcOracleAddress: env.DRIFT_USDC_ORACLE_ADDRESS,
+  assetMintAddress: env.ASSET_MINT_ADDRESS,
+  assetTokenProgram: env.ASSET_TOKEN_PROGRAM,
+  kaminoScopeAddress: env.KAMINO_SCOPE_ADDRESS,
+  voltrLookupTableAddress: env.VOLTR_LOOKUP_TABLE_ADDRESS,
+  driftLookupTableAddress: env.DRIFT_LOOKUP_TABLE_ADDRESS,
+};
