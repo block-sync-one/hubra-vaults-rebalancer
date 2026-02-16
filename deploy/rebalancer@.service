@@ -6,10 +6,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=copilot
-WorkingDirectory=/home/copilot/rebalancer
+WorkingDirectory=/home/copilot/hubra-vaults-rebalancer
 
-EnvironmentFile=/home/copilot/rebalancer/.env
-EnvironmentFile=/home/copilot/rebalancer/.env.%i
+EnvironmentFile=/home/copilot/hubra-vaults-rebalancer/.env
+EnvironmentFile=/home/copilot/hubra-vaults-rebalancer/.env.%i
 Environment=ENV_FILE=.env.%i
 
 ExecStart=/usr/bin/node dist/index.js
