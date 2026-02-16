@@ -32,6 +32,16 @@ function startHealthServer(): Promise<void> {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "ok" }));
         }
+      } else if (_req.url === "/rebalance" && _req.method === "POST") {
+        if (!rebalanceWorker) {
+          res.writeHead(503, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "rebalance worker not running" }));
+        } else {
+          rebalanceWorker.postMessage({ type: "trigger_rebalance" });
+          logger.info("Manual rebalance triggered via HTTP");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "triggered" }));
+        }
       } else {
         res.writeHead(404);
         res.end();

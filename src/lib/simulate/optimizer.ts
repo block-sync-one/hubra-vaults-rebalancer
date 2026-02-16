@@ -44,6 +44,55 @@ export function createInitialAllocation(
   return allocations;
 }
 
+export function createYieldBasedAllocation(
+  totalPositionValue: BN,
+  inputs: StrategyInput[],
+  winnerId: string | null
+): Allocation[] {
+  if (winnerId === null) {
+    return createEqualWeightAllocation(totalPositionValue, inputs);
+  }
+
+  const locked = inputs.map((input) =>
+    BN.max(
+      input.positionValue.sub(input.availableWithdrawableLiquidity),
+      new BN(0)
+    )
+  );
+
+  const lockedInNonWinners = inputs.reduce(
+    (acc, input, i) => (input.strategyId !== winnerId ? acc.add(locked[i]) : acc),
+    new BN(0)
+  );
+
+  const winnerAmount = totalPositionValue.sub(lockedInNonWinners);
+
+  const allocations: Allocation[] = [];
+  let allocated = new BN(0);
+
+  for (let i = 0; i < inputs.length; i++) {
+    const isWinner = inputs[i].strategyId === winnerId;
+    const allocationValue = isWinner ? winnerAmount : locked[i];
+    allocations.push({
+      strategyId: inputs[i].strategyId,
+      strategyType: inputs[i].strategyType,
+      strategyAddress: inputs[i].strategyAddress,
+      positionValue: allocationValue,
+    });
+    allocated = allocated.add(allocationValue);
+  }
+
+  const remainder = totalPositionValue.sub(allocated);
+  allocations.push({
+    strategyId: IDLE_ID,
+    strategyType: "idle",
+    strategyAddress: DEFAULT_ADDRESS,
+    positionValue: BN.max(remainder, new BN(0)),
+  });
+
+  return allocations;
+}
+
 /**
  * Creates an equal-weight target allocation across all strategies.
  *

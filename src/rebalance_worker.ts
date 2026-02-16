@@ -1,12 +1,15 @@
 import { parentPort } from "worker_threads";
 import { logger, recursiveTryCatch, setShuttingDown } from "./lib/utils";
-import { runRebalanceLoop } from "./rebalance_loop";
+import { runRebalanceLoop, triggerManualRebalance } from "./rebalance_loop";
 
-// Listen for shutdown message from parent
+// Listen for messages from parent
 parentPort?.on("message", (msg: { type: string }) => {
   if (msg.type === "shutdown") {
     logger.info("Rebalance worker received shutdown signal");
     setShuttingDown();
+  } else if (msg.type === "trigger_rebalance") {
+    logger.info("Rebalance worker received manual trigger");
+    triggerManualRebalance();
   }
 });
 

@@ -33,6 +33,11 @@ const envSchema = z.object({
   REFRESH_MIN_POSITION_VALUE: z.coerce.number().default(1_000_000),
   REBALANCE_DEVIATION_BPS: z.coerce.number().default(0),
 
+  // Yield optimization
+  MIN_TVL_USD: z.coerce.number().default(500_000),
+  MAX_DILUTION_PCT: z.coerce.number().default(0.005),
+  YIELD_API_TIMEOUT_MS: z.coerce.number().default(5_000),
+
   // Worker
   WORKER_MAX_MEMORY_MB: z.coerce.number().default(2048),
 
@@ -90,6 +95,9 @@ export const config = {
   jupiterSwapSlippageBps: env.JUPITER_SWAP_SLIPPAGE_BPS,
   refreshMinPositionValue: env.REFRESH_MIN_POSITION_VALUE,
   rebalanceDeviationBps: env.REBALANCE_DEVIATION_BPS,
+  minTvlUsd: env.MIN_TVL_USD,
+  maxDilutionPct: env.MAX_DILUTION_PCT,
+  yieldApiTimeoutMs: env.YIELD_API_TIMEOUT_MS,
   healthServerPort: env.HEALTH_SERVER_PORT,
   logLevel: env.LOG_LEVEL,
 

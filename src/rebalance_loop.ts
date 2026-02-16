@@ -22,7 +22,7 @@ import {
 import { BN } from "@coral-xyz/anchor";
 import {
   Allocation,
-  getCurrentAndEqualAllocation,
+  getCurrentAndTargetAllocation,
 } from "./lib/simulate";
 import {
   createDepositDEarnStrategyIx,
@@ -40,6 +40,29 @@ import { getConnectionManager } from "./lib/connection";
 import { toAddress, toPublicKey } from "./lib/convert";
 import { strategyRegistry, DriftEarnStrategyConfig } from "./lib/strategy-config";
 import { getManagerKeypair } from "./lib/keypair";
+
+let manualTriggerResolve: (() => void) | null = null;
+
+export function triggerManualRebalance() {
+  if (manualTriggerResolve) {
+    manualTriggerResolve();
+    manualTriggerResolve = null;
+  }
+}
+
+function sleepUntilNextRunOrTrigger(ms: number): Promise<"timer" | "trigger"> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      manualTriggerResolve = null;
+      resolve("timer");
+    }, ms);
+
+    manualTriggerResolve = () => {
+      clearTimeout(timer);
+      resolve("trigger");
+    };
+  });
+}
 
 export async function runRebalanceLoop() {
   logger.info("Starting Rebalance Bot...");
@@ -106,11 +129,11 @@ export async function runRebalanceLoop() {
           ) {
             try {
               logger.info(
-                `[Rebalance Loop ${loopCount}] Executing equal-weight rebalance (triggered by ATA change)...`
+                `[Rebalance Loop ${loopCount}] Executing yield-based rebalance (triggered by ATA change)...`
               );
 
-              const { prevAllocations, equalAllocations } =
-                await getCurrentAndEqualAllocation(connection, rpc);
+              const { prevAllocations, targetAllocations } =
+                await getCurrentAndTargetAllocation(connection, rpc);
 
               await executeRebalance(
                 rpc,
@@ -118,7 +141,7 @@ export async function runRebalanceLoop() {
                 manager,
                 voltrClient,
                 prevAllocations,
-                equalAllocations
+                targetAllocations
               );
               logger.info(
                 `[Rebalance Loop ${loopCount}] Successfully executed rebalance.`
@@ -152,65 +175,68 @@ export async function runRebalanceLoop() {
   // Start the subscription
   startAccountSubscription();
 
-  // Main scheduled loop — execute equal-weight rebalance on every interval
+  // Main loop — wait for interval or manual trigger, then execute rebalance
   while (!isShuttingDown()) {
-    let timeToSleep = 30000;
     try {
       const now = Date.now();
       const timeSinceLastExecution = now - lastExecutionTime;
+      const remaining = config.rebalanceLoopIntervalMs - timeSinceLastExecution;
 
-      if (timeSinceLastExecution >= config.rebalanceLoopIntervalMs) {
-        logger.info(
-          `[Rebalance Loop ${loopCount}] Executing scheduled equal-weight rebalance...`
-        );
-        lastMainExecutionStartTime = now;
-
-        const { prevAllocations, equalAllocations } =
-          await getCurrentAndEqualAllocation(connection, rpc);
-
-        const strategies = prevAllocations.map((allocation) =>
-          allocation.strategyId
-        );
-
-        logger.info(
-          `[Rebalance Loop ${loopCount}] strategies: ${strategies.join(",")}`
-        );
-        logger.info(
-          `[Rebalance Loop ${loopCount}] prevAllocations: ${prevAllocations.map(
-            (allocation) => allocation.positionValue.toNumber()
-          )}`
-        );
-        logger.info(
-          `[Rebalance Loop ${loopCount}] equalAllocations: ${equalAllocations.map(
-            (allocation) => allocation.positionValue.toNumber()
-          )}`
-        );
-
-        await executeRebalance(
-          rpc,
-          connection,
-          manager,
-          voltrClient,
-          prevAllocations,
-          equalAllocations
-        );
-        logger.info(
-          `[Rebalance Loop ${loopCount}] Successfully executed scheduled rebalance.`
-        );
-        lastExecutionTime = Date.now();
-        loopCount++;
-      } else {
+      if (remaining > 0) {
         logger.info(`[Rebalance Loop ${loopCount}] Waiting for next interval.`);
+        const wakeReason = await sleepUntilNextRunOrTrigger(remaining);
+        if (isShuttingDown()) break;
+        var isManual = wakeReason === "trigger";
+      } else {
+        var isManual = false;
       }
+
+      logger.info(
+        `[Rebalance Loop ${loopCount}] Executing ${isManual ? "manual" : "scheduled"} yield-based rebalance...`
+      );
+      lastMainExecutionStartTime = Date.now();
+
+      const { prevAllocations, targetAllocations } =
+        await getCurrentAndTargetAllocation(connection, rpc);
+
+      const strategies = prevAllocations.map((allocation) =>
+        allocation.strategyId
+      );
+
+      logger.info(
+        `[Rebalance Loop ${loopCount}] strategies: ${strategies.join(",")}`
+      );
+      logger.info(
+        `[Rebalance Loop ${loopCount}] prevAllocations: ${prevAllocations.map(
+          (allocation) => allocation.positionValue.toNumber()
+        )}`
+      );
+      logger.info(
+        `[Rebalance Loop ${loopCount}] targetAllocations: ${targetAllocations.map(
+          (allocation) => allocation.positionValue.toNumber()
+        )}`
+      );
+
+      await executeRebalance(
+        rpc,
+        connection,
+        manager,
+        voltrClient,
+        prevAllocations,
+        targetAllocations
+      );
+      logger.info(
+        `[Rebalance Loop ${loopCount}] Successfully executed rebalance.`
+      );
+      lastExecutionTime = Date.now();
+      loopCount++;
     } catch (error) {
-      timeToSleep = 12400;
       logger.error(
         error,
-        `[Rebalance Loop ${loopCount}] Error during scheduled rebalance execution`
+        `[Rebalance Loop ${loopCount}] Error during rebalance execution`
       );
+      await sleep(12400);
     }
-
-    await sleep(timeToSleep);
 
     // Restart subscription if it somehow got disconnected
     if (!isShuttingDown() && subscriptionId === null) {
