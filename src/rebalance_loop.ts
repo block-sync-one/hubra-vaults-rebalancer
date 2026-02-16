@@ -100,9 +100,12 @@ export async function runRebalanceLoop() {
   );
 
   let lastExecutionTime = 0;
-  let lastMainExecutionStartTime = 0;
   let loopCount = 0;
   let subscriptionId: number | null = null;
+  let previousBalance: BN | null = null;
+
+  const isOnCooldown = () =>
+    Date.now() - lastExecutionTime < config.rebalanceLoopIntervalMs;
 
   // Set up account subscription for real-time monitoring of new deposits
   const startAccountSubscription = () => {
@@ -118,47 +121,48 @@ export async function runRebalanceLoop() {
           const amountBytes = accountData.slice(64, 72);
           const currentBalance = new BN(amountBytes, "le");
 
-          logger.info(
-            `[Rebalance Loop ${loopCount}] ATA Balance Update: ${currentBalance.toString()}`
-          );
+          const balanceIncreased =
+            previousBalance !== null && currentBalance.gt(previousBalance);
+          previousBalance = currentBalance;
 
-          // Trigger rebalance on new deposits
-          if (
-            currentBalance.gt(new BN(config.depositStrategyMinAmount)) &&
-            lastMainExecutionStartTime < lastExecutionTime
-          ) {
-            try {
-              logger.info(
-                `[Rebalance Loop ${loopCount}] Executing yield-based rebalance (triggered by ATA change)...`
-              );
+          if (!balanceIncreased) return;
 
-              const { prevAllocations, targetAllocations } =
-                await getCurrentAndTargetAllocation(connection, rpc);
+          if (isOnCooldown()) {
+            logger.info(
+              `[Rebalance Loop ${loopCount}] Deposit detected but on cooldown, skipping`
+            );
+            return;
+          }
 
-              await executeRebalance(
-                rpc,
-                connection,
-                manager,
-                voltrClient,
-                prevAllocations,
-                targetAllocations
-              );
-              logger.info(
-                `[Rebalance Loop ${loopCount}] Successfully executed rebalance.`
-              );
+          if (currentBalance.lte(new BN(config.depositStrategyMinAmount))) return;
 
-              lastExecutionTime = Date.now();
-              logger.info(
-                `[Rebalance Loop ${loopCount}] Next scheduled execution in ${config.rebalanceLoopIntervalMs / 1000
-                } seconds`
-              );
-              loopCount++;
-            } catch (error) {
-              logger.error(
-                error,
-                `[Rebalance Loop ${loopCount}] Error during rebalance execution`
-              );
-            }
+          try {
+            logger.info(
+              `[Rebalance Loop ${loopCount}] Executing rebalance (triggered by deposit)...`
+            );
+
+            const { prevAllocations, targetAllocations } =
+              await getCurrentAndTargetAllocation(connection, rpc);
+
+            await executeRebalance(
+              rpc,
+              connection,
+              manager,
+              voltrClient,
+              prevAllocations,
+              targetAllocations
+            );
+            logger.info(
+              `[Rebalance Loop ${loopCount}] Successfully executed rebalance.`
+            );
+
+            lastExecutionTime = Date.now();
+            loopCount++;
+          } catch (error) {
+            logger.error(
+              error,
+              `[Rebalance Loop ${loopCount}] Error during rebalance execution`
+            );
           }
         } catch (error) {
           logger.error(error, `Error processing account change`);
@@ -194,7 +198,7 @@ export async function runRebalanceLoop() {
       logger.info(
         `[Rebalance Loop ${loopCount}] Executing ${isManual ? "manual" : "scheduled"} yield-based rebalance...`
       );
-      lastMainExecutionStartTime = Date.now();
+      const executionStart = Date.now();
 
       const { prevAllocations, targetAllocations } =
         await getCurrentAndTargetAllocation(connection, rpc);
