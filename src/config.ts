@@ -10,6 +10,7 @@ if (process.env.ENV_FILE) {
 }
 
 const addressField = z.string().min(1).transform((val) => address(val) as Address);
+const optionalString = z.string().optional().transform((v) => v?.trim() || undefined);
 
 const boolFlag = (defaultVal: string) =>
   z
@@ -22,9 +23,9 @@ const envSchema = z.object({
   // Core
   YIELD_MARKETS_URL: z.string().min(1, "YIELD_MARKETS_URL is required"),
   RPC_URL: z.string().min(1, "RPC_URL is required"),
-  RPC_FALLBACK_URL: z.string().min(1).optional(),
-  MANAGER_SECRET_PATH: z.string().min(1).optional(),
-  MANAGER_SECRET_KEY: z.string().min(1).optional(),
+  RPC_FALLBACK_URL: optionalString,
+  MANAGER_SECRET_PATH: optionalString,
+  MANAGER_SECRET_KEY: optionalString,
 
   // Intervals
   REFRESH_LOOP_INTERVAL_MS: z.coerce.number().default(600000),
