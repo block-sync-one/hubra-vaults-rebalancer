@@ -120,16 +120,16 @@ fi
 MONITORING_DIR="$WORK_DIR/monitoring"
 mkdir -p "$MONITORING_DIR"
 
-# Collect ports from each instance's env file
-TARGETS=""
+# Generate per-instance targets with asset labels
+STATIC_CONFIGS=""
 for inst in "${instances[@]}"; do
   port=$(grep -oP '(?<=HEALTH_SERVER_PORT=)\d+' "$WORK_DIR/.env-${inst}" 2>/dev/null \
       || grep -oP '(?<=HEALTH_SERVER_PORT=)\d+' "$WORK_DIR/.env" 2>/dev/null \
       || echo "9090")
-  if [[ -n "$TARGETS" ]]; then
-    TARGETS="${TARGETS}, "
-  fi
-  TARGETS="${TARGETS}\"host.docker.internal:${port}\""
+  STATIC_CONFIGS="${STATIC_CONFIGS}
+      - targets: [\"host.docker.internal:${port}\"]
+        labels:
+          asset: \"${inst}\""
 done
 
 cat > "$MONITORING_DIR/prometheus.yml" <<PROM
@@ -139,11 +139,10 @@ global:
 
 scrape_configs:
   - job_name: "rebalancer"
-    static_configs:
-      - targets: [${TARGETS}]
+    static_configs:${STATIC_CONFIGS}
 PROM
 
-echo "  Generated prometheus.yml with targets: [${TARGETS}]"
+echo "  Generated prometheus.yml with per-asset targets"
 
 # ── 7. Copy monitoring configs + dashboard ──────────────────
 GRAFANA_PROV="$MONITORING_DIR/grafana/provisioning"
