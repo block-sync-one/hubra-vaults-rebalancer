@@ -20,7 +20,6 @@ export interface KaminoMarketStrategyConfig extends BaseStrategyConfig {
 
 export interface DriftEarnStrategyConfig extends BaseStrategyConfig {
   type: "driftEarn";
-  marketIndex: number;
 }
 
 export interface JupiterLendStrategyConfig extends BaseStrategyConfig {
@@ -54,7 +53,7 @@ function loadStrategyRegistry(): StrategyRegistry {
     const base: BaseStrategyConfig = { id: s.id, type: s.type, address: address(s.address) };
     switch (s.type) {
       case "driftEarn":
-        return { ...base, type: "driftEarn", marketIndex: s.marketIndex } as DriftEarnStrategyConfig;
+        return { ...base, type: "driftEarn" } as DriftEarnStrategyConfig;
       case "kaminoVault":
         return { ...base, type: "kaminoVault" } as KaminoVaultStrategyConfig;
       case "kaminoMarket":

@@ -77,10 +77,7 @@ pnpm run dev
 | `VOLTR_VAULT_MANAGER_ADDRESS` | Vault manager address |
 | `ASSET_MINT_ADDRESS` | Vault asset token mint |
 | `ASSET_TOKEN_PROGRAM` | Token program for the asset (Token or Token-2022) |
-| `DRIFT_USDC_ORACLE_ADDRESS` | Drift USDC oracle |
-| `KAMINO_SCOPE_ADDRESS` | Kamino Scope oracle |
 | `VOLTR_LOOKUP_TABLE_ADDRESS` | Voltr address lookup table |
-| `DRIFT_LOOKUP_TABLE_ADDRESS` | Drift address lookup table |
 
 ### Optional Environment Variables
 

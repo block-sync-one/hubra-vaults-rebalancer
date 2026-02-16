@@ -53,12 +53,9 @@ const envSchema = z.object({
   VOLTR_VAULT_ADDRESS: addressField,
   VOLTR_VAULT_ADMIN_ADDRESS: addressField,
   VOLTR_VAULT_MANAGER_ADDRESS: addressField,
-  DRIFT_USDC_ORACLE_ADDRESS: addressField,
   ASSET_MINT_ADDRESS: addressField,
   ASSET_TOKEN_PROGRAM: addressField,
-  KAMINO_SCOPE_ADDRESS: addressField,
   VOLTR_LOOKUP_TABLE_ADDRESS: addressField,
-  DRIFT_LOOKUP_TABLE_ADDRESS: addressField,
 }).refine(
   (data) => data.MANAGER_SECRET_PATH || data.MANAGER_SECRET_KEY,
   { message: "Either MANAGER_SECRET_PATH or MANAGER_SECRET_KEY must be set" }
@@ -107,10 +104,7 @@ export const config = {
   voltrVaultAddress: env.VOLTR_VAULT_ADDRESS,
   voltrVaultAdminAddress: env.VOLTR_VAULT_ADMIN_ADDRESS,
   voltrVaultManagerAddress: env.VOLTR_VAULT_MANAGER_ADDRESS,
-  driftUsdcOracleAddress: env.DRIFT_USDC_ORACLE_ADDRESS,
   assetMintAddress: env.ASSET_MINT_ADDRESS,
   assetTokenProgram: env.ASSET_TOKEN_PROGRAM,
-  kaminoScopeAddress: env.KAMINO_SCOPE_ADDRESS,
   voltrLookupTableAddress: env.VOLTR_LOOKUP_TABLE_ADDRESS,
-  driftLookupTableAddress: env.DRIFT_LOOKUP_TABLE_ADDRESS,
 };

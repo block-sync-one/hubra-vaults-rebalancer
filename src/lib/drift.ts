@@ -2,8 +2,10 @@ import { BN } from "@coral-xyz/anchor";
 import {
   calculateDepositRate,
   calculateUtilization,
+  configs,
   DRIFT_PROGRAM_ID,
   getTokenAmount,
+  MainnetSpotMarkets,
   SPOT_MARKET_RATE_PRECISION,
   SpotBalanceType,
   SpotMarketAccount,
@@ -12,7 +14,7 @@ import {
 import { VoltrClient } from "@voltr/vault-sdk";
 import { config } from "../config";
 import { Keypair, TransactionInstruction } from "@solana/web3.js";
-import { address, getAddressEncoder, getProgramDerivedAddress } from "@solana/kit";
+import { address, getProgramDerivedAddress } from "@solana/kit";
 import {
   DEPOSIT_EARN_DISCRIMINATOR,
   WITHDRAW_EARN_DISCRIMINATOR,
@@ -24,7 +26,6 @@ import { toPublicKey, TOKEN_2022_PROGRAM_ADDR } from "./convert";
 export const DRIFT_STATE_ADDRESS = address("5zpq7DvB6UdFFvpmBPspGPNfUGoBRRCE2HHg5u3gxcsN");
 
 const DRIFT_PROGRAM_ADDR = address(DRIFT_PROGRAM_ID);
-const addressEncoder = getAddressEncoder();
 
 /**
  * Evaluates the projected deposit APR for a Drift spot market reserve with a new allocation.
@@ -81,17 +82,21 @@ export function evaluateDriftSpotMarketYield(
 
 export async function createDepositDEarnStrategyIx(
   voltrClient: VoltrClient,
-  marketIndex: number,
   managerKp: Keypair,
   depositAmount: BN,
   transactionIxs: TransactionInstruction[] = [],
   addressLookupTableAddresses: string[] = []
 ) {
   try {
+    const spotMarketConfig = MainnetSpotMarkets.filter(
+      spotMarketConfig => spotMarketConfig.mint.equals(toPublicKey(config.assetMintAddress))
+    ).at(0);
+    if (!spotMarketConfig) throw Error("Invalid spot market config");
+
     const [counterPartyTaAddr] = await getProgramDerivedAddress({
       seeds: [
         Buffer.from("spot_market_vault"),
-        new BN(marketIndex).toArrayLike(Buffer, "le", 2),
+        new BN(spotMarketConfig.marketIndex).toArrayLike(Buffer, "le", 2),
       ],
       programAddress: DRIFT_PROGRAM_ADDR,
     });
@@ -100,7 +105,7 @@ export async function createDepositDEarnStrategyIx(
     const [spotMarketAddr] = await getProgramDerivedAddress({
       seeds: [
         Buffer.from("spot_market"),
-        new BN(marketIndex).toArrayLike(Buffer, "le", 2),
+        new BN(spotMarketConfig.marketIndex).toArrayLike(Buffer, "le", 2),
       ],
       programAddress: DRIFT_PROGRAM_ADDR,
     });
@@ -140,7 +145,7 @@ export async function createDepositDEarnStrategyIx(
         isWritable: false,
       },
       {
-        pubkey: toPublicKey(config.driftUsdcOracleAddress),
+        pubkey: spotMarketConfig.oracle,
         isSigner: false,
         isWritable: false,
       },
@@ -156,7 +161,7 @@ export async function createDepositDEarnStrategyIx(
     }
 
     let additionalArgs = Buffer.from([
-      ...new BN(marketIndex).toArrayLike(Buffer, "le", 2),
+      ...new BN(spotMarketConfig.marketIndex).toArrayLike(Buffer, "le", 2),
     ]);
 
     const createDepositStrategyIx = await voltrClient.createDepositStrategyIx(
@@ -177,7 +182,7 @@ export async function createDepositDEarnStrategyIx(
     );
 
     transactionIxs.push(createDepositStrategyIx);
-    addressLookupTableAddresses.push(config.driftLookupTableAddress);
+    addressLookupTableAddresses.push(...configs["mainnet-beta"].MARKET_LOOKUP_TABLES);
   } catch (error) {
     logger.error({ err: error }, "Error in drift strategy instruction");
   }
@@ -185,17 +190,21 @@ export async function createDepositDEarnStrategyIx(
 
 export async function createWithdrawDEarnStrategyIx(
   voltrClient: VoltrClient,
-  marketIndex: number,
   managerKp: Keypair,
   withdrawAmount: BN,
   transactionIxs: TransactionInstruction[] = [],
   addressLookupTableAddresses: string[] = []
 ) {
   try {
+    const spotMarketConfig = MainnetSpotMarkets.filter(
+      spotMarketConfig => spotMarketConfig.mint.equals(toPublicKey(config.assetMintAddress))
+    ).at(0);
+    if (!spotMarketConfig) throw Error("Invalid spot market config");
+
     const [counterPartyTaAddr] = await getProgramDerivedAddress({
       seeds: [
         Buffer.from("spot_market_vault"),
-        new BN(marketIndex).toArrayLike(Buffer, "le", 2),
+        new BN(spotMarketConfig.marketIndex).toArrayLike(Buffer, "le", 2),
       ],
       programAddress: DRIFT_PROGRAM_ADDR,
     });
@@ -204,7 +213,7 @@ export async function createWithdrawDEarnStrategyIx(
     const [spotMarketAddr] = await getProgramDerivedAddress({
       seeds: [
         Buffer.from("spot_market"),
-        new BN(marketIndex).toArrayLike(Buffer, "le", 2),
+        new BN(spotMarketConfig.marketIndex).toArrayLike(Buffer, "le", 2),
       ],
       programAddress: DRIFT_PROGRAM_ADDR,
     });
@@ -250,7 +259,7 @@ export async function createWithdrawDEarnStrategyIx(
         isWritable: false,
       },
       {
-        pubkey: toPublicKey(config.driftUsdcOracleAddress),
+        pubkey: spotMarketConfig.oracle,
         isSigner: false,
         isWritable: false,
       },
@@ -266,7 +275,7 @@ export async function createWithdrawDEarnStrategyIx(
     }
 
     let additionalArgs = Buffer.from([
-      ...new BN(marketIndex).toArrayLike(Buffer, "le", 2),
+      ...new BN(spotMarketConfig.marketIndex).toArrayLike(Buffer, "le", 2),
     ]);
 
     const createWithdrawStrategyIx = await voltrClient.createWithdrawStrategyIx(
@@ -287,7 +296,7 @@ export async function createWithdrawDEarnStrategyIx(
     );
 
     transactionIxs.push(createWithdrawStrategyIx);
-    addressLookupTableAddresses.push(config.driftLookupTableAddress);
+    addressLookupTableAddresses.push(...configs["mainnet-beta"].MARKET_LOOKUP_TABLES);
   } catch (error) {
     logger.error({ err: error }, "Error in drift strategy instruction");
   }

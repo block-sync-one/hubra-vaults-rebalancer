@@ -36,6 +36,7 @@ import {
   KAMINO_ADAPTOR_PROGRAM_ID,
   KAMINO_FARM_PROGRAM_ID,
   KAMINO_FARM_GLOBAL_CONFIG,
+  KAMINO_SCOPE_PRICES_ADDRESS,
 } from "../constants";
 import { setupJupiterSwap } from "../jupiter";
 import { getKaminoVaultReservesAccountMetas } from "./reserves";
@@ -789,7 +790,7 @@ export async function createClaimRewardKVaultStrategyIx(
       isWritable: false,
     },
     {
-      pubkey: toPublicKey(config.kaminoScopeAddress),
+      pubkey: toPublicKey(KAMINO_SCOPE_PRICES_ADDRESS),
       isSigner: false,
       isWritable: false,
     },

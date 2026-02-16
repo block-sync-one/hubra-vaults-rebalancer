@@ -128,7 +128,6 @@ async function refreshDepositStrategies(
         case "driftEarn":
           await createDepositDEarnStrategyIx(
             voltrClient,
-            (s as DriftEarnStrategyConfig).marketIndex,
             manager,
             new BN(0),
             transactionIxs,

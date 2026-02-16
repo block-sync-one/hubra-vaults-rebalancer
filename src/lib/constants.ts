@@ -23,3 +23,4 @@ export const DEPOSIT_JLEND_DISCRIMINATOR = Buffer.from([56, 2, 200, 235, 238, 13
 export const WITHDRAW_JLEND_DISCRIMINATOR = Buffer.from([232, 204, 244, 40, 201, 192, 7, 194,]);
 
 export const VOLTR_PROTOCOL_ADMIN_ADDRESS = address("vxyzZyfd6nJ3v82fTSmuRiKF4owWF9sAXqneu9mne9n");
+export const KAMINO_SCOPE_PRICES_ADDRESS = address("3NJYftD5sjVfxSnUdZ1wVML8f3aC6mp1CXCL6L7TnU8C");
