@@ -133,7 +133,23 @@ else
   echo "  Docker already installed"
 fi
 
-# ── 7. Generate Prometheus config with all instance targets ─
+# ── 7. Firewall rules for Docker → host access ──────────
+if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
+  echo ""
+  echo "=== Configuring UFW for Docker bridge access ==="
+  port_idx=0
+  for inst in "${instances[@]}"; do
+    assigned_port=$((BASE_PORT + port_idx))
+    ufw allow from 172.16.0.0/12 to any port "${assigned_port}" proto tcp > /dev/null 2>&1
+    echo "  allowed 172.16.0.0/12 → port ${assigned_port}"
+    port_idx=$((port_idx + 1))
+  done
+  ufw allow from 172.16.0.0/12 to any port 9090 proto tcp > /dev/null 2>&1
+  echo "  allowed 172.16.0.0/12 → port 9090 (Prometheus)"
+  ufw reload > /dev/null 2>&1
+fi
+
+# ── 8. Generate Prometheus config with all instance targets ─
 MONITORING_DIR="$WORK_DIR/monitoring"
 mkdir -p "$MONITORING_DIR"
 
@@ -161,7 +177,7 @@ PROM
 
 echo "  Generated prometheus.yml with per-asset targets"
 
-# ── 8. Copy monitoring configs + dashboard ──────────────────
+# ── 9. Copy monitoring configs + dashboard ──────────────────
 GRAFANA_PROV="$MONITORING_DIR/grafana/provisioning"
 mkdir -p "$GRAFANA_PROV/datasources" "$GRAFANA_PROV/dashboards" "$MONITORING_DIR/dashboards"
 
@@ -172,7 +188,7 @@ datasources:
     type: prometheus
     uid: prometheus
     access: proxy
-    url: http://localhost:9090
+    url: http://prometheus:9090
     isDefault: true
     editable: false
 DS
@@ -231,7 +247,7 @@ volumes:
   grafana_data:
 DC
 
-# ── 9. Start monitoring ────────────────────────────────────
+# ── 10. Start monitoring ───────────────────────────────────
 echo "  Starting Prometheus + Grafana..."
 cd "$MONITORING_DIR"
 sudo -u "$SERVICE_USER" docker compose up -d --pull always 2>/dev/null \
