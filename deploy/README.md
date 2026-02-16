@@ -6,7 +6,7 @@ Systemd-based deployment for running multiple vaults-rebalancer instances (one p
 
 - Linux server with systemd
 - Node.js and pnpm installed
-- Base `.env` + per-asset `.env.<asset>` files in `/home/copilot/hubra-vaults-rebalancer`
+- Base `.env` + per-asset `.env-<asset>` files in `/home/copilot/hubra-vaults-rebalancer`
 
 ## Setup
 
@@ -18,15 +18,15 @@ This will:
 1. Run `pnpm i && pnpm run build` (as `copilot` user)
 2. Install the `vaults-rebalancer@.service` systemd template
 3. Install `vaults-rebalancer-logs` and `vaults-rebalancer-health` CLI tools
-4. Auto-discover all `.env.*` files and enable a service for each
+4. Auto-discover all `.env-*` files and enable a service for each
 
 ## How It Works
 
 `vaults-rebalancer@.service` is a systemd [template unit](https://www.freedesktop.org/software/systemd/man/systemd.unit.html#Description). The `%i` placeholder resolves to the instance name passed after `@`.
 
 For `vaults-rebalancer@usdc`:
-- Loads `.env` (base config) then `.env.usdc` (asset overrides)
-- Sets `ENV_FILE=.env.usdc` so the app's dotenv layering in `config.ts` works
+- Loads `.env` (base config) then `.env-usdc` (asset overrides)
+- Sets `ENV_FILE=.env-usdc` so the app's dotenv layering in `config.ts` works
 - Auto-restarts on failure with 5s delay
 - Starts on boot
 
@@ -66,7 +66,7 @@ vaults-rebalancer-health usdc usdt  # check specific instances
 
 ## Adding a New Asset
 
-1. Create `.env.<asset>` in the project root
+1. Create `.env-<asset>` in the project root
 2. Run `systemctl enable --now vaults-rebalancer@<asset>` (or re-run `setup.sh`)
 
 ## Removing an Asset

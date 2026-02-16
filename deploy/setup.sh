@@ -79,7 +79,7 @@ done
 SCRIPT
 chmod +x "$BIN_DIR/vaults-rebalancer-health"
 
-mapfile -t instances < <(find "$WORK_DIR" -maxdepth 1 -name '.env.*' -printf '%f\n' | sed 's/^\.env\.//' | sort)
+mapfile -t instances < <(find "$WORK_DIR" -maxdepth 1 -name '.env-*' -printf '%f\n' | sed 's/^\.env-//' | sort)
 
 if [[ ${#instances[@]} -eq 0 ]]; then
   echo "No .env.* files found in $WORK_DIR — nothing to enable."

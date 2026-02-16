@@ -3,7 +3,7 @@ import { expand } from "dotenv-expand";
 import { Address, address } from "@solana/kit";
 import { z } from "zod";
 
-// Load base .env, then layer asset-specific overrides (e.g. ENV_FILE=.env.usdc)
+// Load base .env, then layer asset-specific overrides (e.g. ENV_FILE=.env-usdc)
 expand(dotenvConfig());
 if (process.env.ENV_FILE) {
   expand(dotenvConfig({ path: process.env.ENV_FILE, override: true }));
