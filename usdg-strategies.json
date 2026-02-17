@@ -1,5 +1,6 @@
 {
   "strategies": [
+    { "id": "jupiterLend", "type": "jupiterLend" },
     {
       "id": "elemental-usdg-optimizer",
       "type": "kaminoVault",
