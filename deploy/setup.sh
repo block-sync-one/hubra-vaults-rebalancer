@@ -154,7 +154,9 @@ for inst in "${instances[@]}"; do
   rebalancer-${inst_lower}:
     <<: *rebalancer-common
     container_name: rebalancer-${inst_lower}
-    env_file: .env-${inst}
+    env_file:
+      - .env
+      - .env-${inst}
     environment:
       - STRATEGIES_FILE=/app/strategies.json
     volumes:

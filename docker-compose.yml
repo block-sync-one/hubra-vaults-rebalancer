@@ -44,7 +44,9 @@ services:
   rebalancer-usd1:
     <<: *rebalancer-common
     container_name: rebalancer-usd1
-    env_file: .env-usd1
+    env_file:
+      - .env
+      - .env-usd1
     environment:
       - STRATEGIES_FILE=/app/strategies.json
     volumes:
@@ -57,7 +59,9 @@ services:
   rebalancer-usdc:
     <<: *rebalancer-common
     container_name: rebalancer-usdc
-    env_file: .env-usdc
+    env_file:
+      - .env
+      - .env-usdc
     environment:
       - STRATEGIES_FILE=/app/strategies.json
     volumes:
@@ -70,7 +74,9 @@ services:
   rebalancer-usdg:
     <<: *rebalancer-common
     container_name: rebalancer-usdg
-    env_file: .env-usdg
+    env_file:
+      - .env
+      - .env-usdg
     environment:
       - STRATEGIES_FILE=/app/strategies.json
     volumes:
@@ -83,7 +89,9 @@ services:
   rebalancer-usds:
     <<: *rebalancer-common
     container_name: rebalancer-usds
-    env_file: .env-usds
+    env_file:
+      - .env
+      - .env-usds
     environment:
       - STRATEGIES_FILE=/app/strategies.json
     volumes:
@@ -96,7 +104,9 @@ services:
   rebalancer-usdt:
     <<: *rebalancer-common
     container_name: rebalancer-usdt
-    env_file: .env-usdt
+    env_file:
+      - .env
+      - .env-usdt
     environment:
       - STRATEGIES_FILE=/app/strategies.json
     volumes:
