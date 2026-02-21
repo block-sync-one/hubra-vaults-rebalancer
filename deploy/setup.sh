@@ -1,277 +1,346 @@
 #!/usr/bin/env bash
+# Hubra Vaults Rebalancer - Docker Setup
+# 
+# This script sets up the complete Docker-based rebalancer infrastructure:
+# - Builds container images
+# - Generates vaults.yaml from .env-* files
+# - Starts all rebalancer containers + monitoring stack
+# - Installs CLI helper scripts
+#
+# Usage: sudo bash deploy/setup.sh
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-UNIT_FILE="$SCRIPT_DIR/vaults-rebalancer@.service"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log() { echo -e "${GREEN}===${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+
+# ── 1. Check prerequisites ─────────────────────────────────
+log "Checking prerequisites..."
 
 if [[ $EUID -ne 0 ]]; then
-  echo "Run as root: sudo bash $0"
-  exit 1
+  error "Run as root: sudo bash $0"
 fi
 
-WORK_DIR="$(grep -oP '(?<=WorkingDirectory=).*' "$UNIT_FILE")"
-SERVICE_USER="$(grep -oP '(?<=User=).*' "$UNIT_FILE")"
-
-# ── 1. Build ────────────────────────────────────────────────
-echo "=== Building application ==="
-sudo -u "$SERVICE_USER" bash -c "cd $WORK_DIR && pnpm i && pnpm run build"
-
-# ── 2. Discover instances ───────────────────────────────────
-mapfile -t instances < <(find "$WORK_DIR" -maxdepth 1 -name '.env-*' -printf '%f\n' | sed 's/^\.env-//' | sort)
-
-if [[ ${#instances[@]} -eq 0 ]]; then
-  echo "No .env-* files found in $WORK_DIR — nothing to enable."
-  exit 0
-fi
-
-echo "Discovered instances: ${instances[*]}"
-
-# ── 3. Assign health server ports ────────────────────────
-BASE_PORT=8080
-echo ""
-echo "=== Assigning health server ports ==="
-port_idx=0
-for inst in "${instances[@]}"; do
-  assigned_port=$((BASE_PORT + port_idx))
-  env_file="$WORK_DIR/.env-${inst}"
-  if grep -q '^HEALTH_SERVER_PORT=' "$env_file" 2>/dev/null; then
-    sed -i "s/^HEALTH_SERVER_PORT=.*/HEALTH_SERVER_PORT=${assigned_port}/" "$env_file"
-  else
-    echo "HEALTH_SERVER_PORT=${assigned_port}" >> "$env_file"
-  fi
-  echo "  ${inst} → port ${assigned_port}"
-  port_idx=$((port_idx + 1))
-done
-
-# ── 4. Systemd services ────────────────────────────────────
-echo ""
-echo "=== Installing systemd services ==="
-cp "$UNIT_FILE" /etc/systemd/system/vaults-rebalancer@.service
-systemctl daemon-reload
-
-for inst in "${instances[@]}"; do
-  systemctl enable --now "vaults-rebalancer@${inst}"
-  echo "  enabled vaults-rebalancer@${inst}"
-done
-
-# ── 5. CLI helper scripts ──────────────────────────────────
-echo ""
-echo "=== Installing CLI tools ==="
-install_cli() {
-  local name="$1" body="$2"
-  local path="/usr/local/bin/vaults-rebalancer-${name}"
-  cat > "$path" <<SCRIPT
-#!/usr/bin/env bash
-set -euo pipefail
-WORK_DIR="$WORK_DIR"
-${body}
-SCRIPT
-  chmod +x "$path"
-  echo "  installed vaults-rebalancer-${name}"
-}
-
-# Helper: resolve instance list (args or all discovered)
-RESOLVE_INSTANCES='
-resolve_instances() {
-  if [[ $# -gt 0 ]]; then
-    echo "$@"
-  else
-    find "$WORK_DIR" -maxdepth 1 -name ".env-*" -printf "%f\n" | sed "s/^\.env-//" | sort
-  fi
-}
-'
-
-install_cli "logs" "${RESOLVE_INSTANCES}
-instances=(\$(resolve_instances \"\$@\"))
-units=()
-for i in \"\${instances[@]}\"; do
-  units+=(-u \"vaults-rebalancer@\${i}\")
-done
-journalctl \"\${units[@]}\" -f --no-hostname -o cat
-"
-
-install_cli "health" "${RESOLVE_INSTANCES}
-instances=(\$(resolve_instances \"\$@\"))
-for inst in \"\${instances[@]}\"; do
-  port=\$(grep -oP '(?<=HEALTH_SERVER_PORT=)\\d+' \"\$WORK_DIR/.env-\${inst}\" 2>/dev/null || grep -oP '(?<=HEALTH_SERVER_PORT=)\\d+' \"\$WORK_DIR/.env\" 2>/dev/null || echo 8080)
-  if curl -sf \"http://localhost:\${port}/health\" > /dev/null 2>&1; then
-    echo \"  \${inst}: OK (:\${port})\"
-  else
-    echo \"  \${inst}: FAIL (:\${port})\"
-  fi
-done
-"
-
-install_cli "status" "${RESOLVE_INSTANCES}
-instances=(\$(resolve_instances \"\$@\"))
-for inst in \"\${instances[@]}\"; do
-  systemctl status \"vaults-rebalancer@\${inst}\" --no-pager || true
-  echo \"\"
-done
-"
-
-install_cli "restart" "${RESOLVE_INSTANCES}
-instances=(\$(resolve_instances \"\$@\"))
-for inst in \"\${instances[@]}\"; do
-  systemctl restart \"vaults-rebalancer@\${inst}\"
-  echo \"  restarted vaults-rebalancer@\${inst}\"
-done
-"
-
-# ── 6. Docker (for monitoring stack) ───────────────────────
-echo ""
-echo "=== Setting up monitoring stack ==="
-
+# Install Docker if not present
 if ! command -v docker &> /dev/null; then
-  echo "Docker not found, installing..."
+  log "Installing Docker..."
   curl -fsSL https://get.docker.com | sh
   systemctl enable --now docker
-  usermod -aG docker "$SERVICE_USER"
-  echo "  Docker installed"
+  log "Docker installed"
 else
-  echo "  Docker already installed"
+  echo "  Docker: $(docker --version)"
 fi
 
-# ── 7. Firewall rules for Docker → host access ──────────
-if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
-  echo ""
-  echo "=== Configuring UFW for Docker bridge access ==="
-  port_idx=0
-  for inst in "${instances[@]}"; do
-    assigned_port=$((BASE_PORT + port_idx))
-    ufw allow from 172.16.0.0/12 to any port "${assigned_port}" proto tcp > /dev/null 2>&1
-    echo "  allowed 172.16.0.0/12 → port ${assigned_port}"
-    port_idx=$((port_idx + 1))
-  done
-  ufw allow from 172.16.0.0/12 to any port 9090 proto tcp > /dev/null 2>&1
-  echo "  allowed 172.16.0.0/12 → port 9090 (Prometheus)"
-  ufw reload > /dev/null 2>&1
+# Check docker compose
+if ! docker compose version &> /dev/null; then
+  error "Docker Compose V2 not found. Please update Docker."
+fi
+echo "  Docker Compose: $(docker compose version --short)"
+
+# ── 2. Discover vault instances ────────────────────────────
+log "Discovering vault instances..."
+cd "$REPO_DIR"
+
+mapfile -t instances < <(find . -maxdepth 1 -name '.env-*' -printf '%f\n' | sed 's/^\.env-//' | sort)
+
+if [[ ${#instances[@]} -eq 0 ]]; then
+  error "No .env-* files found. Create .env-usdc, .env-usdt, etc. from .env.example"
 fi
 
-# ── 8. Generate Prometheus config with all instance targets ─
-MONITORING_DIR="$WORK_DIR/monitoring"
-mkdir -p "$MONITORING_DIR"
+echo "  Found ${#instances[@]} vaults: ${instances[*]}"
 
-# Generate per-instance targets with asset labels
-STATIC_CONFIGS=""
+# ── 3. Generate vaults.yaml from .env-* files ──────────────
+log "Generating config/vaults.yaml..."
+
+mkdir -p config
+
+cat > config/vaults.yaml <<YAML
+# Hubra Vaults Configuration
+# Auto-generated by setup.sh on $(date -Iseconds)
+#
+# To add a new vault:
+# 1. Create .env-{symbol} file
+# 2. Create {symbol}-strategies.json
+# 3. Run: sudo bash deploy/setup.sh
+
+idle_threshold: 10.00
+voltr_api: https://api.voltr.xyz
+
+vaults:
+YAML
+
 for inst in "${instances[@]}"; do
-  port=$(grep -oP '(?<=HEALTH_SERVER_PORT=)\d+' "$WORK_DIR/.env-${inst}" 2>/dev/null \
-      || grep -oP '(?<=HEALTH_SERVER_PORT=)\d+' "$WORK_DIR/.env" 2>/dev/null \
-      || echo "8080")
-  STATIC_CONFIGS="${STATIC_CONFIGS}
-      - targets: [\"host.docker.internal:${port}\"]
-        labels:
-          asset: \"${inst}\""
+  env_file=".env-${inst}"
+  
+  # Extract values from env file
+  SYMBOL=$(grep -oP '(?<=ASSET_SYMBOL=).*' "$env_file" 2>/dev/null || echo "$inst")
+  ADDRESS=$(grep -oP '(?<=VOLTR_VAULT_ADDRESS=).*' "$env_file" 2>/dev/null || echo "")
+  
+  if [[ -z "$ADDRESS" ]]; then
+    warn "No VOLTR_VAULT_ADDRESS in $env_file, skipping..."
+    continue
+  fi
+  
+  # Convert to lowercase for container name
+  inst_lower=$(echo "$inst" | tr '[:upper:]' '[:lower:]')
+  
+  cat >> config/vaults.yaml <<YAML
+  - symbol: ${SYMBOL^^}
+    name: Hubra Copilot ${SYMBOL^^}
+    address: ${ADDRESS}
+    rebalancer_host: rebalancer-${inst_lower}
+    rebalancer_port: 9090
+
+YAML
+
+  echo "  Added ${SYMBOL^^} (${ADDRESS:0:8}...)"
 done
 
-cat > "$MONITORING_DIR/prometheus.yml" <<PROM
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+# ── 4. Generate docker-compose.yml with discovered vaults ──
+log "Generating docker-compose.yml..."
 
-scrape_configs:
-  - job_name: "rebalancer"
-    static_configs:${STATIC_CONFIGS}
-PROM
+cat > docker-compose.yml <<'COMPOSE'
+# Hubra Vaults Rebalancer - Docker Compose
+# Auto-generated by setup.sh
 
-echo "  Generated prometheus.yml with per-asset targets"
+version: "3.8"
 
-# ── 9. Copy monitoring configs + dashboard ──────────────────
-GRAFANA_PROV="$MONITORING_DIR/grafana/provisioning"
-mkdir -p "$GRAFANA_PROV/datasources" "$GRAFANA_PROV/dashboards" "$MONITORING_DIR/dashboards"
-
-cat > "$GRAFANA_PROV/datasources/prometheus.yml" <<DS
-apiVersion: 1
-datasources:
-  - name: Prometheus
-    type: prometheus
-    uid: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-    editable: false
-DS
-
-cat > "$GRAFANA_PROV/dashboards/dashboards.yml" <<DP
-apiVersion: 1
-providers:
-  - name: "default"
-    orgId: 1
-    folder: ""
-    type: file
-    disableDeletion: false
-    updateIntervalSeconds: 30
-    options:
-      path: /etc/grafana/dashboards
-      foldersFromFilesStructure: false
-DP
-
-# Copy dashboard JSON from repo
-cp "$REPO_DIR/grafana/rebalancer-dashboard.json" "$MONITORING_DIR/dashboards/"
-
-cat > "$MONITORING_DIR/docker-compose.yml" <<DC
-services:
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "127.0.0.1:9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/dashboards/rebalancer-dashboard.json
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./dashboards:/etc/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
+networks:
+  hubra-vaults:
+    driver: bridge
 
 volumes:
   prometheus_data:
   grafana_data:
-DC
 
-# ── 10. Start monitoring ───────────────────────────────────
-echo "  Starting Prometheus + Grafana..."
-cd "$MONITORING_DIR"
-sudo -u "$SERVICE_USER" docker compose up -d --pull always 2>/dev/null \
-  || docker compose up -d --pull always
+x-rebalancer-common: &rebalancer-common
+  build: .
+  restart: unless-stopped
+  networks:
+    - hubra-vaults
+  healthcheck:
+    test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
 
-echo ""
-echo "=== Setup complete ==="
+services:
+COMPOSE
+
+# Add rebalancer services
+for inst in "${instances[@]}"; do
+  inst_lower=$(echo "$inst" | tr '[:upper:]' '[:lower:]')
+  SYMBOL=$(grep -oP '(?<=ASSET_SYMBOL=).*' ".env-${inst}" 2>/dev/null || echo "$inst")
+  ADDRESS=$(grep -oP '(?<=VOLTR_VAULT_ADDRESS=).*' ".env-${inst}" 2>/dev/null || echo "unknown")
+  
+  # Check if strategies file exists
+  strategies_file="${inst_lower}-strategies.json"
+  if [[ ! -f "$strategies_file" ]]; then
+    strategies_file="strategies.json"
+  fi
+  
+  cat >> docker-compose.yml <<COMPOSE
+
+  rebalancer-${inst_lower}:
+    <<: *rebalancer-common
+    container_name: rebalancer-${inst_lower}
+    env_file: .env-${inst}
+    environment:
+      - STRATEGIES_FILE=/app/strategies.json
+    volumes:
+      - ./${strategies_file}:/app/strategies.json:ro
+    labels:
+      - "hubra.rebalancer=true"
+      - "hubra.vault.symbol=${SYMBOL^^}"
+      - "hubra.vault.address=${ADDRESS}"
+COMPOSE
+
+  echo "  Added rebalancer-${inst_lower}"
+done
+
+# Add monitor and monitoring stack
+cat >> docker-compose.yml <<'COMPOSE'
+
+  # ============================================
+  # MONITOR SERVICE
+  # ============================================
+
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.monitor
+    container_name: hubra-monitor
+    restart: unless-stopped
+    networks:
+      - hubra-vaults
+    volumes:
+      - ./config/vaults.yaml:/app/config/vaults.yaml:ro
+    environment:
+      - VAULTS_CONFIG=/app/config/vaults.yaml
+      - CHECK_INTERVAL=300
+    depends_on:
+COMPOSE
+
+# Add depends_on for monitor
+for inst in "${instances[@]}"; do
+  inst_lower=$(echo "$inst" | tr '[:upper:]' '[:lower:]')
+  echo "      - rebalancer-${inst_lower}" >> docker-compose.yml
+done
+
+cat >> docker-compose.yml <<'COMPOSE'
+
+  # ============================================
+  # MONITORING STACK
+  # ============================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hubra-prometheus
+    restart: unless-stopped
+    networks:
+      - hubra-vaults
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hubra-grafana
+    restart: unless-stopped
+    networks:
+      - hubra-vaults
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+COMPOSE
+
+echo "  Added monitor, prometheus, grafana"
+
+# ── 5. Build Docker images ─────────────────────────────────
+log "Building Docker images..."
+docker compose build --pull
+
+# ── 6. Start all containers ────────────────────────────────
+log "Starting containers..."
+docker compose up -d
+
+# Wait for containers to be healthy
+echo "  Waiting for services to be ready..."
+sleep 10
+
+# ── 7. Install CLI helper scripts ──────────────────────────
+log "Installing CLI tools..."
+
+install_cli() {
+  local name="$1" body="$2"
+  local path="/usr/local/bin/hubra-rebalancer-${name}"
+  cat > "$path" <<SCRIPT
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_DIR="$REPO_DIR"
+cd "\$REPO_DIR"
+${body}
+SCRIPT
+  chmod +x "$path"
+  echo "  installed hubra-rebalancer-${name}"
+}
+
+install_cli "logs" '
+if [[ $# -gt 0 ]]; then
+  docker compose logs -f "rebalancer-$1"
+else
+  docker compose logs -f
+fi
+'
+
+install_cli "status" '
+docker compose ps
+'
+
+install_cli "health" '
+echo "Checking rebalancer health..."
+for container in $(docker compose ps --format "{{.Name}}" | grep rebalancer-); do
+  if docker exec "$container" wget -q --spider http://localhost:9090/health 2>/dev/null; then
+    echo "  $container: OK"
+  else
+    echo "  $container: FAIL"
+  fi
+done
+'
+
+install_cli "restart" '
+if [[ $# -gt 0 ]]; then
+  docker compose restart "rebalancer-$1"
+else
+  docker compose restart
+fi
+'
+
+install_cli "stop" '
+docker compose down
+'
+
+install_cli "start" '
+docker compose up -d
+'
+
+install_cli "rebuild" '
+docker compose build --no-cache
+docker compose up -d
+'
+
+install_cli "monitor-logs" '
+docker compose logs -f monitor
+'
+
+# ── 8. Show status ─────────────────────────────────────────
+log "Setup complete!"
 echo ""
 echo "Services:"
-for inst in "${instances[@]}"; do
-  port=$(grep -oP '(?<=HEALTH_SERVER_PORT=)\d+' "$WORK_DIR/.env-${inst}" 2>/dev/null \
-      || grep -oP '(?<=HEALTH_SERVER_PORT=)\d+' "$WORK_DIR/.env" 2>/dev/null \
-      || echo "8080")
-  echo "  vaults-rebalancer@${inst}  →  http://localhost:${port}/health"
-done
+docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 echo ""
-echo "Monitoring:"
-echo "  Grafana     →  http://localhost:3000  (admin/admin)"
-echo "  Prometheus  →  http://localhost:9090"
+echo "Endpoints:"
+echo "  Grafana     →  http://localhost:3001  (admin/admin)"
+echo "  Prometheus  →  http://localhost:9091"
 echo ""
 echo "CLI tools:"
-echo "  vaults-rebalancer-logs              # tail all instances"
-echo "  vaults-rebalancer-logs usdc         # tail specific instance"
-echo "  vaults-rebalancer-health            # quick OK/FAIL check"
-echo "  vaults-rebalancer-status            # detailed systemctl status"
-echo "  vaults-rebalancer-restart           # restart all instances"
-echo "  vaults-rebalancer-restart usdc      # restart specific instance"
+echo "  hubra-rebalancer-status        # show all container status"
+echo "  hubra-rebalancer-logs          # tail all logs"
+echo "  hubra-rebalancer-logs usdc     # tail specific rebalancer"
+echo "  hubra-rebalancer-monitor-logs  # tail monitor logs"
+echo "  hubra-rebalancer-health        # check health endpoints"
+echo "  hubra-rebalancer-restart       # restart all"
+echo "  hubra-rebalancer-restart usdc  # restart specific"
+echo "  hubra-rebalancer-stop          # stop all"
+echo "  hubra-rebalancer-start         # start all"
+echo "  hubra-rebalancer-rebuild       # rebuild and restart"
+echo ""
+echo "Adding a new vault:"
+echo "  1. Create .env-newvault from .env.example"
+echo "  2. Create newvault-strategies.json"
+echo "  3. Run: sudo bash deploy/setup.sh"
