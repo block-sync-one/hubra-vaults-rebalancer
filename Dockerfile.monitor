@@ -1,0 +1,12 @@
+# Hubra Vaults Monitor
+FROM alpine:3.19
+
+RUN apk add --no-cache bash curl jq yq
+
+WORKDIR /app
+
+COPY scripts/monitor.sh /app/monitor.sh
+RUN chmod +x /app/monitor.sh
+
+# Run monitor loop
+CMD ["/app/monitor.sh"]
