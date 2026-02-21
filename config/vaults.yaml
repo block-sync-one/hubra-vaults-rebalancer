@@ -1,0 +1,46 @@
+# Hubra Vaults Configuration
+# Used by the monitor service to check idle funds and trigger rebalances
+#
+# To add a new vault:
+# 1. Create .env-{symbol} file with vault config
+# 2. Create {symbol}-strategies.json with strategy addresses
+# 3. Add service block to docker-compose.yml
+# 4. Add entry below
+# 5. docker-compose up -d
+
+# Idle funds threshold in USD - trigger rebalance if exceeded
+idle_threshold: 10.00
+
+# Voltr API base URL
+voltr_api: https://api.voltr.xyz
+
+vaults:
+  - symbol: USD1
+    name: Hubra Copilot USD1
+    address: 663azFYEnHDTLGf4CEk8KpNTje8XxZVLnQwo9LjbSejy
+    rebalancer_host: rebalancer-usd1
+    rebalancer_port: 9090
+
+  - symbol: USDC
+    name: Hubra Copilot USDC
+    address: 3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ
+    rebalancer_host: rebalancer-usdc
+    rebalancer_port: 9090
+
+  - symbol: USDG
+    name: Hubra Copilot USDG
+    address: 7VZ1XKK7Zns6UzRc1Wz54u6cypN7zaduasVXXr7NysxH
+    rebalancer_host: rebalancer-usdg
+    rebalancer_port: 9090
+
+  - symbol: USDS
+    name: Hubra Copilot USDS
+    address: 5mv1cURMSaPU3q3wFVoN4mKMWNFVvUtH3UZrG4Z2Mgfz
+    rebalancer_host: rebalancer-usds
+    rebalancer_port: 9090
+
+  - symbol: USDT
+    name: Hubra Copilot USDT
+    address: 3kzb6rcDJxSdkWCwXXP9PULSqBy6rVDNWanzw5dBCYCj
+    rebalancer_host: rebalancer-usdt
+    rebalancer_port: 9090

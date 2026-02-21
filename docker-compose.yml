@@ -1,0 +1,170 @@
+# Hubra Vaults Rebalancer - Docker Compose
+# 
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose up -d rebalancer-usdc  # Start specific rebalancer
+#   docker-compose logs -f monitor    # Follow monitor logs
+#   docker-compose down               # Stop all services
+#
+# Adding a new vault:
+#   1. Create .env-{symbol} with vault config
+#   2. Create {symbol}-strategies.json
+#   3. Add rebalancer service below (copy existing block)
+#   4. Add entry to config/vaults.yaml
+#   5. docker-compose up -d
+
+version: "3.8"
+
+networks:
+  hubra-vaults:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+x-rebalancer-common: &rebalancer-common
+  build: .
+  restart: unless-stopped
+  networks:
+    - hubra-vaults
+  labels:
+    - "hubra.rebalancer=true"
+  healthcheck:
+    test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+
+services:
+  # ============================================
+  # REBALANCER INSTANCES (one per vault)
+  # ============================================
+
+  rebalancer-usd1:
+    <<: *rebalancer-common
+    container_name: rebalancer-usd1
+    env_file: .env-usd1
+    environment:
+      - STRATEGIES_FILE=/app/strategies.json
+    volumes:
+      - ./usd1-strategies.json:/app/strategies.json:ro
+    labels:
+      - "hubra.rebalancer=true"
+      - "hubra.vault.symbol=USD1"
+      - "hubra.vault.address=663azFYEnHDTLGf4CEk8KpNTje8XxZVLnQwo9LjbSejy"
+
+  rebalancer-usdc:
+    <<: *rebalancer-common
+    container_name: rebalancer-usdc
+    env_file: .env-usdc
+    environment:
+      - STRATEGIES_FILE=/app/strategies.json
+    volumes:
+      - ./usdc-strategies.json:/app/strategies.json:ro
+    labels:
+      - "hubra.rebalancer=true"
+      - "hubra.vault.symbol=USDC"
+      - "hubra.vault.address=3maCuTJVPteZ2dFA8dADxz2EbpJHfoAG5txYhXDs6gNQ"
+
+  rebalancer-usdg:
+    <<: *rebalancer-common
+    container_name: rebalancer-usdg
+    env_file: .env-usdg
+    environment:
+      - STRATEGIES_FILE=/app/strategies.json
+    volumes:
+      - ./usdg-strategies.json:/app/strategies.json:ro
+    labels:
+      - "hubra.rebalancer=true"
+      - "hubra.vault.symbol=USDG"
+      - "hubra.vault.address=7VZ1XKK7Zns6UzRc1Wz54u6cypN7zaduasVXXr7NysxH"
+
+  rebalancer-usds:
+    <<: *rebalancer-common
+    container_name: rebalancer-usds
+    env_file: .env-usds
+    environment:
+      - STRATEGIES_FILE=/app/strategies.json
+    volumes:
+      - ./usds-strategies.json:/app/strategies.json:ro
+    labels:
+      - "hubra.rebalancer=true"
+      - "hubra.vault.symbol=USDS"
+      - "hubra.vault.address=5mv1cURMSaPU3q3wFVoN4mKMWNFVvUtH3UZrG4Z2Mgfz"
+
+  rebalancer-usdt:
+    <<: *rebalancer-common
+    container_name: rebalancer-usdt
+    env_file: .env-usdt
+    environment:
+      - STRATEGIES_FILE=/app/strategies.json
+    volumes:
+      - ./usdt-strategies.json:/app/strategies.json:ro
+    labels:
+      - "hubra.rebalancer=true"
+      - "hubra.vault.symbol=USDT"
+      - "hubra.vault.address=3kzb6rcDJxSdkWCwXXP9PULSqBy6rVDNWanzw5dBCYCj"
+
+  # ============================================
+  # MONITOR SERVICE
+  # ============================================
+
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.monitor
+    container_name: hubra-monitor
+    restart: unless-stopped
+    networks:
+      - hubra-vaults
+    volumes:
+      - ./config/vaults.yaml:/app/config/vaults.yaml:ro
+    environment:
+      - VAULTS_CONFIG=/app/config/vaults.yaml
+      - CHECK_INTERVAL=300  # 5 minutes
+    depends_on:
+      - rebalancer-usd1
+      - rebalancer-usdc
+      - rebalancer-usdg
+      - rebalancer-usds
+      - rebalancer-usdt
+
+  # ============================================
+  # MONITORING STACK
+  # ============================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hubra-prometheus
+    restart: unless-stopped
+    networks:
+      - hubra-vaults
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hubra-grafana
+    restart: unless-stopped
+    networks:
+      - hubra-vaults
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
